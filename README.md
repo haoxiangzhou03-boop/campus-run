@@ -7,6 +7,7 @@
 发布任务 · 接单跑腿 · 赏金托管 · 积累信用
 
 [![🌐 在线体验](https://img.shields.io/badge/%F0%9F%8C%90_%E5%9C%A8%E7%BA%BF%E4%BD%93%E9%AA%8C-%E7%82%B9%E5%87%BB%E8%AE%BF%E9%97%AE-10b981?style=for-the-badge)](https://haoxiangzhou03-boop.github.io/campus-run/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](./LICENSE)
 
 </div>
 
@@ -95,8 +96,12 @@ campus-run/
 │  ├─ store/          # 全局状态 + localStorage 持久化
 │  ├─ data/seed.js    # 演示种子数据
 │  └─ lib/            # 信用规则、格式化工具
-├─ deploy-github.mjs  # 一键部署到 GitHub Pages（走 API，绕开被墙的 git push）
+├─ docs/              # 构建产物（GitHub Pages 发布目录）
+├─ index.html         # Vite 入口
+├─ vite.config.js     # 构建配置（base: './'）
 ├─ vercel.json        # SPA 路由重写（Vercel 部署备用）
+├─ deploy-github.mjs  # 一键部署到 GitHub Pages（走 API）
+├─ LICENSE            # MIT 开源许可
 └─ package.json
 ```
 
@@ -111,18 +116,23 @@ npm run preview  # 预览构建产物
 
 ## 📦 部署与更新
 
-本站部署在 **GitHub Pages**，链接固定不变：<https://haoxiangzhou03-boop.github.io/campus-run/>
+本站部署在 **GitHub Pages**（发布目录为 `docs/`），链接固定不变：<https://haoxiangzhou03-boop.github.io/campus-run/>
 
 更新流程（域名保持不变）：
 
 ```bash
 npm run build
+# 将 dist/ 同步到 docs/ 后，用 GitHub API 上传并开启 Pages
 $env:GITHUB_USER='haoxiangzhou03-boop'
 $env:GITHUB_TOKEN='<你的 GitHub Token>'
 node deploy-github.mjs
 ```
 
 > 说明：由于网络环境限制，直接 `git push` 到 github.com 不可用，本项目改用 `api.github.com` 上传构建产物并开启 Pages，稳定可靠。
+
+## 📄 开源许可
+
+本项目基于 **MIT License** 开源，详见 [LICENSE](./LICENSE)。
 
 ---
 
