@@ -1,10 +1,20 @@
+// 部署到 GitHub Pages：把 dist/ 同步到 docs/，并确保 Pages 发布目录为 /docs
+// 用法：
+//   npm run build
+//   $env:GITHUB_USER='你的用户名'; $env:GITHUB_TOKEN='你的token'; node deploy-github.mjs
+//
+// 说明：本机网络无法直接 push github.com，脚本改用 api.github.com 上传，稳定可靠。
+// 站点地址固定为 https://<user>.github.io/<repo>/ ，域名不会变。
+
 import { readdirSync, statSync, readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 
 const USER = process.env.GITHUB_USER
 const TOKEN = process.env.GITHUB_TOKEN
 const REPO = process.env.GITHUB_REPO || 'campus-run'
+const BRANCH = process.env.GITHUB_BRANCH || 'main'
 const DIST = process.env.DIST || 'dist'
+const DOCS = 'docs'
 
 if (!USER || !TOKEN) {
   console.error('请设置环境变量 GITHUB_USER 和 GITHUB_TOKEN')
@@ -25,61 +35,47 @@ async function api(path, opts = {}) {
   const text = await res.text()
   let json = null
   try { json = JSON.parse(text) } catch {}
-  if (!res.ok) throw new Error(`${opts.method || 'GET'} ${path} -> ${res.status}: ${text.slice(0, 300)}`)
-  return json || text
+  return { status: res.status, ok: res.ok, json, text }
 }
 
-function listFiles(dir) {
+function walk(dir) {
   const out = []
   for (const name of readdirSync(dir)) {
     const p = join(dir, name)
-    if (statSync(p).isDirectory()) out.push(...listFiles(p))
+    if (statSync(p).isDirectory()) out.push(...walk(p))
     else out.push(p)
   }
   return out
 }
 
+const enc = (p) => p.split('/').map(encodeURIComponent).join('/')
+
+async function putFile(repoPath, buf) {
+  const p = enc(repoPath)
+  let sha
+  const ex = await api(`/repos/${USER}/${REPO}/contents/${p}?ref=${BRANCH}`)
+  if (ex.ok && ex.json && ex.json.sha) sha = ex.json.sha
+  const body = { message: `deploy: sync ${repoPath}`, content: buf.toString('base64'), branch: BRANCH }
+  if (sha) body.sha = sha
+  const res = await api(`/repos/${USER}/${REPO}/contents/${p}`, { method: 'PUT', body: JSON.stringify(body) })
+  if (!res.ok) throw new Error(`PUT ${repoPath} -> ${res.status}: ${res.text.slice(0, 200)}`)
+  console.log('↑', repoPath)
+}
+
 async function main() {
-  let repo
-  try {
-    repo = await api(`/repos/${USER}/${REPO}`)
-    console.log('仓库:', repo.html_url)
-  } catch (e) {
-    repo = await api('/user/repos', {
-      method: 'POST',
-      body: JSON.stringify({ name: REPO, private: false, auto_init: false, description: '校园跑腿互助平台 CampusRun' }),
-    })
-    console.log('仓库已创建:', repo.html_url)
-  }
-
-  const files = listFiles(DIST)
-  for (const f of files) {
+  console.log('--- 同步 dist/ -> docs/ ---')
+  for (const f of walk(DIST)) {
     const rel = relative(DIST, f).split('\\').join('/')
-    const encPath = rel.split('/').map(encodeURIComponent).join('/')
-    const content = readFileSync(f).toString('base64')
-    await api(`/repos/${USER}/${REPO}/contents/${encPath}`, {
-      method: 'PUT',
-      body: JSON.stringify({ message: `deploy ${rel}`, content, branch: 'main' }),
-    })
-    console.log('已上传', rel)
+    await putFile(`${DOCS}/${rel}`, readFileSync(f))
   }
 
-  for (const body of [
-    { source: { branch: 'main', path: '/' } },
-    { build_type: 'legacy', source: { branch: 'main', path: '/' } },
-  ]) {
-    try {
-      await api(`/repos/${USER}/${REPO}/pages`, { method: 'POST', body: JSON.stringify(body) })
-      console.log('Pages 已开启')
-      break
-    } catch (e) {
-      console.log('Pages 尝试:', e.message.slice(0, 140))
-    }
-  }
+  console.log('--- 确保 Pages 发布目录为 /docs ---')
+  let r = await api(`/repos/${USER}/${REPO}/pages`, { method: 'PUT', body: JSON.stringify({ source: { branch: BRANCH, path: `/${DOCS}` } }) })
+  if (!r.ok) r = await api(`/repos/${USER}/${REPO}/pages`, { method: 'POST', body: JSON.stringify({ source: { branch: BRANCH, path: `/${DOCS}` } }) })
+  console.log(r.ok ? 'Pages 源已设为 /docs' : `Pages 提示: ${r.status} ${r.text.slice(0, 120)}`)
 
-  const url = `https://${USER.toLowerCase()}.github.io/${REPO}/`
   console.log('DONE')
-  console.log('SITE_URL=' + url)
+  console.log('SITE_URL=https://' + USER.toLowerCase() + '.github.io/' + REPO + '/')
 }
 
 main().catch((e) => { console.error('DEPLOY_FAILED:', e.message); process.exit(1) })
